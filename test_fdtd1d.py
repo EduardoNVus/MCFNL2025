@@ -231,5 +231,30 @@ def test_fdtd_1d_solver_conductivity():
         assert solver.energy[0] >= solver.energy[i]
 
 
+def test_fdtd_1d_total_scattered_field():
+    nx = 101
+    xE = np.linspace(-1, 1, nx)
+    x0 = 5
+    sigma = 0.1
+
+    dx = xE[1] - xE[0]
+    dt = 0.5 * dx / C0
+    Tf = 2
+
+
+    def gaussian_tf(x, t):
+        return np.exp((x-x0-C0*t)**2 / (2*sigma**2))
+    
+    solver = FDTD1D(xE, bounds=('pec', 'mur'))
+    solver.add_totalfield(x0, gaussian_tf)
+    
+    final_condition = solver.run_until(Tf, dt)
+    expected_condition = np.zeros(final_condition)
+
+
+    assert np.allclose(final_condition, expected_condition)
+
+
+
 if __name__ == "__main__":
     pytest.main([__file__]) 

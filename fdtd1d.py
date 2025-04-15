@@ -26,14 +26,15 @@ class FDTD1D:
         self.h_old = np.zeros_like(self.h)
         self.eps = np.ones_like(self.xE)  # Default permittivity is 1 everywhere
         self.cond = np.zeros_like(self.xE)  # Default conductivity is 0 everywheree
-        self.initialized = False
+        
         self.energyE = []
         self.energyH = []
         self.energy = []
+        self.time = 0
+        self.total_field = []
 
     def set_initial_condition(self, initial_condition):
         self.e[:] = initial_condition[:]
-        self.initialized = True
 
     def set_permittivity_regions(self, regions):
         """Set different permittivity regions in the grid.
@@ -60,16 +61,22 @@ class FDTD1D:
             self.cond[start_idx:end_idx] = cond_value
 
     def step(self, dt):
-        if not self.initialized:
-            raise RuntimeError(
-                "Initial condition not set. Call set_initial_condition first.")
-
         self.e_old_left = self.e[1]
         self.e_old_right = self.e[-2]
 
         self.h[:] = self.h[:] - dt / self.dx / MU0 * (self.e[1:] - self.e[:-1])
-        self.e[1:-1] = ( 1 / ((self.eps[1:-1] / dt) + (self.cond[1:-1] / 2)) ) * ( ( (self.eps[1:-1]/dt) - (self.cond[1:-1]/2) ) * self.e[1:-1] - 1 / self.dx * (self.h[1:] - self.h[:-1]) )
+        # Total field
+        isource = self.total_field[0]
+        sourcefunction = self.total_field[1]
+        self.h[isource] = self.h[isource] + sourcefunction(self.xH[isource],self.time)
+        self.time += dt/2 # First half time step upload
 
+
+        self.e[1:-1] = ( 1 / ((self.eps[1:-1] / dt) + (self.cond[1:-1] / 2)) ) * ( ( (self.eps[1:-1]/dt) - (self.cond[1:-1]/2) ) * self.e[1:-1] - 1 / self.dx * (self.h[1:] - self.h[:-1]) )
+        # Total field
+        self.e[isource] = self.e[isource] + sourcefunction(self.xE[isource],self.time)
+        self.time += dt/2 #  Second half time step upload
+        # Boundry Conditions
         if self.bounds[0] == 'pec':
             self.e[0] = 0.0
         elif self.bounds[0] == 'mur':
@@ -101,18 +108,20 @@ class FDTD1D:
         self.h_old[:] = self.h[:]
 
         # For debugging and visualization
-        # plt.plot(self.xE, self.e, label='Electric Field')
-        # plt.plot(self.xH, self.h, label='Magnetic Field')
-        # plt.ylim(-1,1)
-        # plt.pause(0.01)
-        # plt.grid()
-        # plt.cla()
+        plt.plot(self.xE, self.e, label='Electric Field')
+        plt.plot(self.xH, self.h, label='Magnetic Field')
+        #plt.ylim(-1,1)
+        plt.pause(0.01)
+        plt.grid()
+        plt.cla()
+    
+    def add_totalfield(self,xs,sourceFunction):
+        isource = np.where(self.xE > xs)[0][0] # Index in xE and xH of the location of the source
+        self.total_field = self.total_field + [isource, sourceFunction]
+
+
 
     def run_until(self, Tf, dt):
-        if not self.initialized:
-            raise RuntimeError(
-                "Initial condition not set. Call set_initial_condition first.")
-
         n_steps = int(Tf / dt)
         for _ in range(n_steps):
             self.step(dt)
